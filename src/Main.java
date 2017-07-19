@@ -16,12 +16,6 @@ import java.util.Vector;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.dnd.DND;
-import org.eclipse.swt.dnd.DragSource;
-import org.eclipse.swt.dnd.DragSourceEvent;
-import org.eclipse.swt.dnd.DragSourceListener;
-import org.eclipse.swt.dnd.DropTarget;
-import org.eclipse.swt.dnd.DropTargetAdapter;
-import org.eclipse.swt.dnd.DropTargetEvent;
 import org.eclipse.swt.dnd.FileTransfer;
 import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.events.SelectionAdapter;
@@ -66,11 +60,6 @@ public class Main {
   private File currentDirectory = null;
 
   private boolean initial = true;
-
-  /* Drag and drop optimizations */
-
-  private File[] processedDropFiles = null; // so Drag only deletes what it
-                        // needs to
 
   private File[] deferredRefreshFiles = null; // to defer notifyRefreshFiles
                         // while we do DND
@@ -229,7 +218,6 @@ public class Main {
    */
   private void createShellContents() {
     shell.setText(getResourceString("Файловый менеджер", new Object[] { "" }));
-    //shell.setImage(iconCache.stockImages[iconCache.shellIcon]);
 
     GridLayout gridLayout = new GridLayout();
     gridLayout.numColumns = 3;
@@ -351,99 +339,6 @@ public class Main {
           item.setImage(image);
       }
     });
-    createTreeDragSource(tree);
-    createTreeDropTarget(tree);
-  }
-
-  /**
-   * Creates the Drag & Drop DragSource for items being dragged from the tree.
-   * 
-   * @return the DragSource for the tree
-   */
-  private DragSource createTreeDragSource(final Tree tree) {
-    DragSource dragSource = new DragSource(tree, DND.DROP_MOVE
-        | DND.DROP_COPY);
-    dragSource.setTransfer(new Transfer[] { FileTransfer.getInstance() });
-    dragSource.addDragListener(new DragSourceListener() {
-      TreeItem[] dndSelection = null;
-
-      String[] sourceNames = null;
-
-      public void dragStart(DragSourceEvent event) {
-        dndSelection = tree.getSelection();
-        sourceNames = null;
-        event.doit = dndSelection.length > 0;
-        processedDropFiles = null;
-      }
-
-      public void dragFinished(DragSourceEvent event) {
-        dragSourceHandleDragFinished(event, sourceNames);
-        dndSelection = null;
-        sourceNames = null;
-        processedDropFiles = null;
-        handleDeferredRefresh();
-      }
-
-      public void dragSetData(DragSourceEvent event) {
-        if (dndSelection == null || dndSelection.length == 0)
-          return;
-        if (!FileTransfer.getInstance().isSupportedType(event.dataType))
-          return;
-
-        sourceNames = new String[dndSelection.length];
-        for (int i = 0; i < dndSelection.length; i++) {
-          File file = (File) dndSelection[i]
-              .getData(TREEITEMDATA_FILE);
-          sourceNames[i] = file.getAbsolutePath();
-        }
-        event.data = sourceNames;
-      }
-    });
-    return dragSource;
-  }
-
-  /**
-   * Creates the Drag & Drop DropTarget for items being dropped onto the tree.
-   * 
-   * @return the DropTarget for the tree
-   */
-  private DropTarget createTreeDropTarget(final Tree tree) {
-    DropTarget dropTarget = new DropTarget(tree, DND.DROP_MOVE
-        | DND.DROP_COPY);
-    dropTarget.setTransfer(new Transfer[] { FileTransfer.getInstance() });
-    dropTarget.addDropListener(new DropTargetAdapter() {
-      public void dragEnter(DropTargetEvent event) {
-      }
-
-      public void dragLeave(DropTargetEvent event) {
-        handleDeferredRefresh();
-      }
-
-      public void dragOver(DropTargetEvent event) {
-        dropTargetValidate(event, getTargetFile(event));
-        event.feedback |= DND.FEEDBACK_EXPAND | DND.FEEDBACK_SCROLL;
-      }
-
-      public void drop(DropTargetEvent event) {
-        File targetFile = getTargetFile(event);
-        if (dropTargetValidate(event, targetFile))
-          dropTargetHandleDrop(event, targetFile);
-      }
-
-      private File getTargetFile(DropTargetEvent event) {
-        // Determine the target File for the drop
-        TreeItem item = tree.getItem(tree.toControl(new Point(event.x,
-            event.y)));
-        File targetFile = null;
-        if (item != null) {
-          // We are over a particular item in the tree, use the item's
-          // file
-          targetFile = (File) item.getData(TREEITEMDATA_FILE);
-        }
-        return targetFile;
-      }
-    });
-    return dropTarget;
   }
 
   /**
@@ -676,6 +571,10 @@ public class Main {
       column.setWidth(tableWidths[i]);
     }
     table.setHeaderVisible(true);
+    //Menu popupMenu = new Menu(table);
+    //MenuItem menuItem = new MenuItem(popupMenu, SWT.NONE);
+    //menuItem.setText("get MD5"); 
+    //table.setMenu(popupMenu);
     table.addSelectionListener(new SelectionAdapter() {
       public void widgetSelected(SelectionEvent event) {
       }
@@ -694,106 +593,6 @@ public class Main {
         return files;
       }
     });
-
-    createTableDragSource(table);
-    createTableDropTarget(table);
-  }
-
-  /**
-   * Creates the Drag & Drop DragSource for items being dragged from the
-   * table.
-   * 
-   * @return the DragSource for the table
-   */
-  private DragSource createTableDragSource(final Table table) {
-    DragSource dragSource = new DragSource(table, DND.DROP_MOVE
-        | DND.DROP_COPY);
-    dragSource.setTransfer(new Transfer[] { FileTransfer.getInstance() });
-    dragSource.addDragListener(new DragSourceListener() {
-      TableItem[] dndSelection = null;
-
-      String[] sourceNames = null;
-
-      public void dragStart(DragSourceEvent event) {
-        dndSelection = table.getSelection();
-        sourceNames = null;
-        event.doit = dndSelection.length > 0;
-      }
-
-      public void dragFinished(DragSourceEvent event) {
-        dragSourceHandleDragFinished(event, sourceNames);
-        dndSelection = null;
-        sourceNames = null;
-        handleDeferredRefresh();
-      }
-
-      public void dragSetData(DragSourceEvent event) {
-        if (dndSelection == null || dndSelection.length == 0)
-          return;
-        if (!FileTransfer.getInstance().isSupportedType(event.dataType))
-          return;
-
-        sourceNames = new String[dndSelection.length];
-        for (int i = 0; i < dndSelection.length; i++) {
-          File file = (File) dndSelection[i]
-              .getData(TABLEITEMDATA_FILE);
-          sourceNames[i] = file.getAbsolutePath();
-        }
-        event.data = sourceNames;
-      }
-    });
-    return dragSource;
-  }
-
-  /**
-   * Creates the Drag & Drop DropTarget for items being dropped onto the
-   * table.
-   * 
-   * @return the DropTarget for the table
-   */
-  private DropTarget createTableDropTarget(final Table table) {
-    DropTarget dropTarget = new DropTarget(table, DND.DROP_MOVE
-        | DND.DROP_COPY);
-    dropTarget.setTransfer(new Transfer[] { FileTransfer.getInstance() });
-    dropTarget.addDropListener(new DropTargetAdapter() {
-      public void dragEnter(DropTargetEvent event) {
-      }
-
-      public void dragLeave(DropTargetEvent event) {
-        handleDeferredRefresh();
-      }
-
-      public void dragOver(DropTargetEvent event) {
-        dropTargetValidate(event, getTargetFile(event));
-        event.feedback |= DND.FEEDBACK_EXPAND | DND.FEEDBACK_SCROLL;
-      }
-
-      public void drop(DropTargetEvent event) {
-        File targetFile = getTargetFile(event);
-        if (dropTargetValidate(event, targetFile))
-          dropTargetHandleDrop(event, targetFile);
-      }
-
-      private File getTargetFile(DropTargetEvent event) {
-        // Determine the target File for the drop
-        TableItem item = table.getItem(table.toControl(new Point(
-            event.x, event.y)));
-        File targetFile = null;
-        if (item == null) {
-          // We are over an unoccupied area of the table.
-          // If it is a COPY, we can use the table's root file.
-          if (event.detail == DND.DROP_COPY) {
-            targetFile = (File) table.getData(TABLEDATA_DIR);
-          }
-        } else {
-          // We are over a particular item in the table, use the
-          // item's file
-          targetFile = (File) item.getData(TABLEITEMDATA_FILE);
-        }
-        return targetFile;
-      }
-    });
-    return dropTarget;
   }
 
   /**
@@ -1043,188 +842,6 @@ public class Main {
   }
 
   /**
-   * Validates a drop target as a candidate for a drop operation.
-   * <p>
-   * Used in dragOver() and dropAccept().<br>
-   * Note event.detail is set to DND.DROP_NONE by this method if the target is
-   * not valid.
-   * </p>
-   * 
-   * @param event
-   *            the DropTargetEvent to validate
-   * @param targetFile
-   *            the File representing the drop target location under
-   *            inspection, or null if none
-   */
-  private boolean dropTargetValidate(DropTargetEvent event, File targetFile) {
-    if (targetFile != null && targetFile.isDirectory()) {
-      if (event.detail != DND.DROP_COPY && event.detail != DND.DROP_MOVE) {
-        event.detail = DND.DROP_MOVE;
-      }
-    } else {
-      event.detail = DND.DROP_NONE;
-    }
-    return event.detail != DND.DROP_NONE;
-  }
-
-  /**
-   * Handles a drop on a dropTarget.
-   * <p>
-   * Used in drop().<br>
-   * Note event.detail is modified by this method.
-   * </p>
-   * 
-   * @param event
-   *            the DropTargetEvent passed as parameter to the drop() method
-   * @param targetFile
-   *            the File representing the drop target location under
-   *            inspection, or null if none
-   */
-  private void dropTargetHandleDrop(DropTargetEvent event, File targetFile) {
-    // Get dropped data (an array of filenames)
-    if (!dropTargetValidate(event, targetFile))
-      return;
-    final String[] sourceNames = (String[]) event.data;
-    if (sourceNames == null)
-      event.detail = DND.DROP_NONE;
-    if (event.detail == DND.DROP_NONE)
-      return;
-
-    // Open progress dialog
-    progressDialog = new ProgressDialog(shell,
-        (event.detail == DND.DROP_MOVE) ? ProgressDialog.MOVE
-            : ProgressDialog.COPY);
-    progressDialog.setTotalWorkUnits(sourceNames.length);
-    progressDialog.open();
-
-    // Copy each file
-    Vector /* of File */processedFiles = new Vector();
-    for (int i = 0; (i < sourceNames.length)
-        && (!progressDialog.isCancelled()); i++) {
-      final File source = new File(sourceNames[i]);
-      final File dest = new File(targetFile, source.getName());
-      if (source.equals(dest))
-        continue; // ignore if in same location
-
-      progressDialog.setDetailFile(source, ProgressDialog.COPY);
-      while (!progressDialog.isCancelled()) {
-        if (copyFileStructure(source, dest)) {
-          processedFiles.add(source);
-          break;
-        } else if (!progressDialog.isCancelled()) {
-          if (event.detail == DND.DROP_MOVE) {
-            // It is not possible to notify an external drag source
-            // that a drop
-            // operation was only partially successful. This is
-            // particularly a
-            // problem for DROP_MOVE operations since unless the
-            // source gets
-            // DROP_NONE, it will delete the original data including
-            // bits that
-            // may not have been transferred successfully.
-            MessageBox box = new MessageBox(shell, SWT.ICON_ERROR
-                | SWT.RETRY | SWT.CANCEL);
-            box
-                .setText(getResourceString("dialog.FailedCopy.title"));
-            box.setMessage(getResourceString(
-                "dialog.FailedCopy.description", new Object[] {
-                    source, dest }));
-            int button = box.open();
-            if (button == SWT.CANCEL) {
-              i = sourceNames.length;
-              event.detail = DND.DROP_NONE;
-              break;
-            }
-          } else {
-            // We can recover gracefully from errors if the drag
-            // source belongs
-            // to this application since it will look at
-            // processedDropFiles.
-            MessageBox box = new MessageBox(shell, SWT.ICON_ERROR
-                | SWT.ABORT | SWT.RETRY | SWT.IGNORE);
-            box
-                .setText(getResourceString("dialog.FailedCopy.title"));
-            box.setMessage(getResourceString(
-                "dialog.FailedCopy.description", new Object[] {
-                    source, dest }));
-            int button = box.open();
-            if (button == SWT.ABORT)
-              i = sourceNames.length;
-            if (button != SWT.RETRY)
-              break;
-          }
-        }
-        progressDialog.addProgress(1);
-      }
-    }
-    notifyRefreshFiles(new File[] { targetFile });
-  }
-
-  /**
-   * Handles the completion of a drag on a dragSource.
-   * <p>
-   * Used in dragFinished().<br>
-   * </p>
-   * 
-   * @param event
-   *            the DragSourceEvent passed as parameter to the dragFinished()
-   *            method
-   * @param sourceNames
-   *            the names of the files that were dragged (event.data is
-   *            invalid)
-   */
-  private void dragSourceHandleDragFinished(DragSourceEvent event,
-      String[] sourceNames) {
-    if (sourceNames == null)
-      return;
-    if (event.detail != DND.DROP_MOVE)
-      return;
-
-    // Get array of files that were actually transferred
-    final File[] sourceFiles;
-    if (processedDropFiles != null) {
-      sourceFiles = processedDropFiles;
-    } else {
-      sourceFiles = new File[sourceNames.length];
-      for (int i = 0; i < sourceNames.length; ++i)
-        sourceFiles[i] = new File(sourceNames[i]);
-    }
-    if (progressDialog == null)
-      progressDialog = new ProgressDialog(shell, ProgressDialog.MOVE);
-    progressDialog.setTotalWorkUnits(sourceFiles.length);
-    progressDialog.setProgress(0);
-    progressDialog.open();
-
-    // Delete each file
-    for (int i = 0; (i < sourceFiles.length)
-        && (!progressDialog.isCancelled()); i++) {
-      final File source = sourceFiles[i];
-      progressDialog.setDetailFile(source, ProgressDialog.DELETE);
-      while (!progressDialog.isCancelled()) {
-        if (deleteFileStructure(source)) {
-          break;
-        } else if (!progressDialog.isCancelled()) {
-          MessageBox box = new MessageBox(shell, SWT.ICON_ERROR
-              | SWT.ABORT | SWT.RETRY | SWT.IGNORE);
-          box.setText(getResourceString("dialog.FailedDelete.title"));
-          box.setMessage(getResourceString(
-              "dialog.FailedDelete.description",
-              new Object[] { source }));
-          int button = box.open();
-          if (button == SWT.ABORT)
-            i = sourceNames.length;
-          if (button == SWT.RETRY)
-            break;
-        }
-      }
-      progressDialog.addProgress(1);
-    }
-    notifyRefreshFiles(sourceFiles);
-    progressDialog.close();
-    progressDialog = null;
-  }
-
-  /**
    * Gets filesystem root entries
    * 
    * @return an array of Files corresponding to the root directories on the
@@ -1365,49 +982,6 @@ public class Main {
       }
     }
     return true;
-  }
-
-  /**
-   * Deletes a file or entire directory structure.
-   * 
-   * @param oldFile
-   *            the location of the old file or directory
-   * @return true iff the operation succeeds without errors
-   */
-  boolean deleteFileStructure(File oldFile) {
-    if (oldFile == null)
-      return false;
-    if (oldFile.isDirectory()) {
-      /*
-       * Delete a directory
-       */
-      if (progressDialog != null) {
-        progressDialog.setDetailFile(oldFile, ProgressDialog.DELETE);
-      }
-      File[] subFiles = oldFile.listFiles();
-      if (subFiles != null) {
-        if (progressDialog != null) {
-          progressDialog.addWorkUnits(subFiles.length);
-        }
-        for (int i = 0; i < subFiles.length; i++) {
-          File oldSubFile = subFiles[i];
-          if (!deleteFileStructure(oldSubFile))
-            return false;
-          if (progressDialog != null) {
-            progressDialog.addProgress(1);
-            if (progressDialog.isCancelled())
-              return false;
-          }
-        }
-      }
-    }
-    if (simulateOnly) {
-      // System.out.println(getResourceString("simulate.Delete.text",
-      // new Object[] { oldFile.getPath(), oldFile.getPath() }));
-      return true;
-    } else {
-      return oldFile.delete();
-    }
   }
 
   /**
@@ -1579,15 +1153,12 @@ public class Main {
         .lastModified()));
     final String sizeString;
     final String typeString;
-    final Image iconImage;
 
     if (file.isDirectory()) {
-      typeString = getResourceString("filetype.Folder");
+      typeString = getResourceString("Папка");
       sizeString = "";
-      iconImage = iconCache.stockImages[iconCache.iconClosedFolder];
     } else {
-      sizeString = getResourceString("filesize.KB",
-          new Object[] { new Long((file.length() + 512) / 1024) });
+    	sizeString = (file.length()/1024) + "KB";
 
       int dot = nameString.lastIndexOf('.');
       if (dot != -1) {
@@ -1595,15 +1166,12 @@ public class Main {
         Program program = Program.findProgram(extension);
         if (program != null) {
           typeString = program.getName();
-          iconImage = iconCache.getIconFromProgram(program);
         } else {
-          typeString = getResourceString("filetype.Unknown",
+          typeString = getResourceString("Файл",
               new Object[] { extension.toUpperCase() });
-          iconImage = iconCache.stockImages[iconCache.iconFile];
         }
       } else {
-        typeString = getResourceString("filetype.None");
-        iconImage = iconCache.stockImages[iconCache.iconFile];
+        typeString = getResourceString("Файл");
       }
     }
     final String[] strings = new String[] { nameString, sizeString,
@@ -1616,7 +1184,6 @@ public class Main {
           return;
         TableItem tableItem = new TableItem(table, 0);
         tableItem.setText(strings);
-        tableItem.setImage(iconImage);
         tableItem.setData(TABLEITEMDATA_FILE, file);
       }
     });
@@ -1792,15 +1359,6 @@ public class Main {
   }
 }
 
-/*******************************************************************************
- * Copyright (c) 2000, 2004 IBM Corporation and others. All rights reserved.
- * This program and the accompanying materials are made available under the
- * terms of the Eclipse Public License v1.0 which accompanies this distribution,
- * and is available at http://www.eclipse.org/legal/epl-v10.html
- * 
- * Contributors: IBM Corporation - initial API and implementation
- ******************************************************************************/
-
 /**
  * Manages icons for the application. This is necessary as we could easily end
  * up creating thousands of icons bearing the same image.
@@ -1885,47 +1443,5 @@ class IconCache {
       }
       stockCursors = null;
     }
-  }
-
-  /**
-   * Creates a stock image
-   * 
-   * @param display
-   *            the display
-   * @param path
-   *            the relative path to the icon
-   */
-  /*private Image createStockImage(Display display, String path) {
-    InputStream stream = IconCache.class.getResourceAsStream(path);
-    ImageData imageData = new ImageData(stream);
-    ImageData mask = imageData.getTransparencyMask();
-    Image result = new Image(display, imageData, mask);
-    try {
-      stream.close();
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-    return result;
-  }*/
-
-  /**
-   * Gets an image for a file associated with a given program
-   * 
-   * @param program
-   *            the Program
-   */
-  public Image getIconFromProgram(Program program) {
-    Image image = (Image) iconCache.get(program);
-    if (image == null) {
-      ImageData imageData = program.getImageData();
-      if (imageData != null) {
-        image = new Image(null, imageData, imageData
-            .getTransparencyMask());
-        iconCache.put(program, image);
-      } else {
-        image = stockImages[iconFile];
-      }
-    }
-    return image;
   }
 }

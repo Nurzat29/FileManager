@@ -13,6 +13,7 @@ import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 import java.util.Vector;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.dnd.DND;
@@ -44,6 +45,8 @@ import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.TableItem;
+import org.eclipse.swt.widgets.ToolBar;
+import org.eclipse.swt.widgets.ToolItem;
 import org.eclipse.swt.widgets.Tree;
 import org.eclipse.swt.widgets.TreeItem;
 
@@ -56,6 +59,8 @@ public class Main {
   private Display display;
 
   private Shell shell;
+  
+  private ToolBar toolBar;
   
   private File currentDirectory = null;
 
@@ -229,6 +234,7 @@ public class Main {
     createComboView(shell, gridData);
     gridData = new GridData(GridData.HORIZONTAL_ALIGN_FILL);
     gridData.horizontalSpan = 2;
+    createToolBar(shell, gridData);
 
     SashForm sashForm = new SashForm(shell, SWT.NONE);
     sashForm.setOrientation(SWT.HORIZONTAL);
@@ -542,7 +548,38 @@ public class Main {
     item.setData(TREEITEMDATA_IMAGECOLLAPSED,
         iconCache.stockImages[iconCache.iconClosedDrive]);
   }
-
+  
+  private void createToolBar(final Shell shell, Object layoutData) {
+	    toolBar = new ToolBar(shell, SWT.NULL);
+	    toolBar.setLayoutData(layoutData);
+	    ToolItem item = new ToolItem(toolBar, SWT.SEPARATOR);
+	    item = new ToolItem(toolBar, SWT.PUSH);
+	    item.setText("Generate MD5");
+	    item.setToolTipText(getResourceString("Сгенерировать MD5"));
+	    item.addSelectionListener(new SelectionAdapter() {
+	      public void widgetSelected(SelectionEvent e) {
+	    	  if(table.getSelection().length == 0) {
+	    		  MessageBox errorMessage = new MessageBox(shell, SWT.ERROR);
+	    		  errorMessage.setText("Ошибка");
+	    		  errorMessage.setMessage("Выберите файл!");
+	    		  errorMessage.open();
+	    	  } else {
+	    		  TableItem[] item1 = table.getSelection();
+	    		  System.out.println(item1.length);
+	    		  MessageBox messageBox = new MessageBox(shell, SWT.ICON_INFORMATION);
+	    		  messageBox.setText("Успешно");
+	    		  messageBox.setMessage("MD5: " + getMD5(item1[0].toString()));
+	    		  messageBox.open();
+	    	  }
+	      }
+	    });
+  }
+  
+  public String getMD5(String st) {
+      String md5Hex = DigestUtils.md5Hex(st);
+      return md5Hex;
+  }
+  
   /**
    * Creates the file details table.
    * 

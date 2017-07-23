@@ -38,7 +38,11 @@ import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Listener;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.swt.widgets.MenuItem;
 import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.ProgressBar;
 import org.eclipse.swt.widgets.Shell;
@@ -61,6 +65,10 @@ public class Main {
   private Shell shell;
   
   private ToolBar toolBar;
+  
+  private Menu popupMenu;
+  
+  private MenuItem menuItem;
   
   private File currentDirectory = null;
 
@@ -608,12 +616,36 @@ public class Main {
       column.setWidth(tableWidths[i]);
     }
     table.setHeaderVisible(true);
-    //Menu popupMenu = new Menu(table);
-    //MenuItem menuItem = new MenuItem(popupMenu, SWT.NONE);
-    //menuItem.setText("get MD5"); 
-    //table.setMenu(popupMenu);
     table.addSelectionListener(new SelectionAdapter() {
       public void widgetSelected(SelectionEvent event) {
+    	  if(table.getSelection().length != 0) {
+    		  System.out.println(table.getSelection().length); 
+    		  popupMenu = new Menu(table);
+        	  menuItem = new MenuItem(popupMenu, SWT.NONE);
+       		  menuItem.setText("generate MD5");
+       		  table.setMenu(popupMenu);
+    	      menuItem.addListener(SWT.Selection, new Listener() {
+				
+				@Override
+				public void handleEvent(Event arg0) {
+					if(table.getSelection().length != 0) {
+						TableItem[] item1 = table.getSelection();
+						MessageBox messageBox = new MessageBox(shell, SWT.ICON_INFORMATION);
+			    		messageBox.setText("Успешно");
+			    		messageBox.setMessage("MD5: " + getMD5(item1[0].toString()));
+			    		messageBox.open();	
+					} else {
+						MessageBox messageBox = new MessageBox(shell, SWT.ICON_INFORMATION);
+			    		messageBox.setText("Ошибка");
+			    		messageBox.setMessage("Выберите файл!");
+			    		messageBox.open();
+					}
+				}
+			});
+    	  } else {
+    		  System.out.println("not selected");
+    		  popupMenu.setVisible(false);
+    	  }
       }
 
       public void widgetDefaultSelected(SelectionEvent event) {

@@ -1,3 +1,6 @@
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferInt;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
@@ -12,6 +15,9 @@ import java.util.Hashtable;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 import java.util.Vector;
+
+import javax.swing.ImageIcon;
+import javax.swing.filechooser.FileSystemView;
 
 import org.apache.commons.codec.digest.DigestUtils;
 import org.eclipse.swt.SWT;
@@ -29,6 +35,7 @@ import org.eclipse.swt.events.TreeEvent;
 import org.eclipse.swt.graphics.Cursor;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.ImageData;
+import org.eclipse.swt.graphics.PaletteData;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
@@ -81,10 +88,6 @@ public class Main {
                             // notifyRefreshFiles
                             // while we do DND
 
-  private ProgressDialog progressDialog = null; // progress dialog for
-                          // locally-initiated
-                          // operations
-
   /* Combo view */
   private static final String COMBODATA_ROOTS = "Combo.roots";
 
@@ -94,9 +97,6 @@ public class Main {
   // String: Previous selection text string
 
   private Combo combo;
-
-  /* Tree view */
-  private IconCache iconCache = new IconCache();
 
   private static final String TREEITEMDATA_FILE = "TreeItem.file";
 
@@ -185,7 +185,6 @@ public class Main {
   public Shell open(Display display) {
     // Create the window
     this.display = display;
-    iconCache.initResources(display);
     shell = new Shell();
     createShellContents();
     notifyRefreshFiles(null);
@@ -198,7 +197,6 @@ public class Main {
    */
   void close() {
     workerStop();
-    iconCache.freeResources();
   }
 
   /**
@@ -362,11 +360,9 @@ public class Main {
    *            the TreeItem to fill in
    */
   private void treeExpandItem(TreeItem item) {
-    shell.setCursor(iconCache.stockCursors[iconCache.cursorWait]);
     final Object stub = item.getData(TREEITEMDATA_STUB);
     if (stub == null)
       treeRefreshItem(item, true);
-    shell.setCursor(iconCache.stockCursors[iconCache.cursorDefault]);
   }
 
   /**
@@ -531,12 +527,7 @@ public class Main {
    */
   private void treeInitFolder(TreeItem item, File folder) {
     item.setText(folder.getName());
-    item.setImage(iconCache.stockImages[iconCache.iconClosedFolder]);
     item.setData(TREEITEMDATA_FILE, folder);
-    item.setData(TREEITEMDATA_IMAGEEXPANDED,
-        iconCache.stockImages[iconCache.iconOpenFolder]);
-    item.setData(TREEITEMDATA_IMAGECOLLAPSED,
-        iconCache.stockImages[iconCache.iconClosedFolder]);
   }
 
   /**
@@ -549,12 +540,7 @@ public class Main {
    */
   private void treeInitVolume(TreeItem item, File volume) {
     item.setText(volume.getPath());
-    item.setImage(iconCache.stockImages[iconCache.iconClosedDrive]);
     item.setData(TREEITEMDATA_FILE, volume);
-    item.setData(TREEITEMDATA_IMAGEEXPANDED,
-        iconCache.stockImages[iconCache.iconOpenDrive]);
-    item.setData(TREEITEMDATA_IMAGECOLLAPSED,
-        iconCache.stockImages[iconCache.iconClosedDrive]);
   }
   
   private void createToolBar(final Shell shell, Object layoutData) {
@@ -786,16 +772,9 @@ public class Main {
   void handleDeferredRefresh() {
     if (!deferredRefreshRequested)
       return;
-    if (progressDialog != null) {
-      progressDialog.close();
-      progressDialog = null;
-    }
-
     deferredRefreshRequested = false;
     File[] files = deferredRefreshFiles;
     deferredRefreshFiles = null;
-
-    shell.setCursor(iconCache.stockCursors[iconCache.cursorWait]);
 
     /*
      * Table view: Refreshes information about any files in the list and
@@ -860,8 +839,6 @@ public class Main {
     final File dir = currentDirectory;
     currentDirectory = null;
     notifySelectedDirectory(dir);
-
-    shell.setCursor(iconCache.stockCursors[iconCache.cursorDefault]);
   }
 
   /**
@@ -963,94 +940,6 @@ public class Main {
       return new File[0];
     sortFiles(list);
     return list;
-  }
-
-  /**
-   * Copies a file or entire directory structure.
-   * 
-   * @param oldFile
-   *            the location of the old file or directory
-   * @param newFile
-   *            the location of the new file or directory
-   * @return true iff the operation succeeds without errors
-   */
-  boolean copyFileStructure(File oldFile, File newFile) {
-    if (oldFile == null || newFile == null)
-      return false;
-
-    // ensure that newFile is not a child of oldFile or a dupe
-    File searchFile = newFile;
-    do {
-      if (oldFile.equals(searchFile))
-        return false;
-      searchFile = searchFile.getParentFile();
-    } while (searchFile != null);
-
-    if (oldFile.isDirectory()) {
-      /*
-       * Copy a directory
-       */
-      if (progressDialog != null) {
-        progressDialog.setDetailFile(oldFile, ProgressDialog.COPY);
-      }
-      if (simulateOnly) {
-        // System.out.println(getResourceString("simulate.DirectoriesCreated.text",
-        // new Object[] { newFile.getPath() }));
-      } else {
-        if (!newFile.mkdirs())
-          return false;
-      }
-      File[] subFiles = oldFile.listFiles();
-      if (subFiles != null) {
-        if (progressDialog != null) {
-          progressDialog.addWorkUnits(subFiles.length);
-        }
-        for (int i = 0; i < subFiles.length; i++) {
-          File oldSubFile = subFiles[i];
-          File newSubFile = new File(newFile, oldSubFile.getName());
-          if (!copyFileStructure(oldSubFile, newSubFile))
-            return false;
-          if (progressDialog != null) {
-            progressDialog.addProgress(1);
-            if (progressDialog.isCancelled())
-              return false;
-          }
-        }
-      }
-    } else {
-      /*
-       * Copy a file
-       */
-      if (simulateOnly) {
-        // System.out.println(getResourceString("simulate.CopyFromTo.text",
-        // new Object[] { oldFile.getPath(), newFile.getPath() }));
-      } else {
-        FileReader in = null;
-        FileWriter out = null;
-        try {
-          in = new FileReader(oldFile);
-          out = new FileWriter(newFile);
-
-          int count;
-          while ((count = in.read()) != -1)
-            out.write(count);
-        } catch (FileNotFoundException e) {
-          return false;
-        } catch (IOException e) {
-          return false;
-        } finally {
-          try {
-            if (in != null)
-              in.close();
-            if (out != null)
-              out.close();
-          } catch (IOException e) {
-            return false;
-          }
-        }
-      }
-    }
-    return true;
   }
 
   /**
@@ -1222,10 +1111,12 @@ public class Main {
         .lastModified()));
     final String sizeString;
     final String typeString;
+    final Image iconImage;
 
     if (file.isDirectory()) {
       typeString = getResourceString("Папка");
       sizeString = "";
+      iconImage = getImage(file);
     } else {
     	sizeString = (file.length()/1024) + "KB";
 
@@ -1253,264 +1144,26 @@ public class Main {
           return;
         TableItem tableItem = new TableItem(table, 0);
         tableItem.setText(strings);
+        tableItem.setImage(getImage(file));
         tableItem.setData(TABLEITEMDATA_FILE, file);
       }
     });
   }
+  
+  public Image getImage(File file) {
+      ImageIcon systemIcon = (ImageIcon) FileSystemView.getFileSystemView().getSystemIcon(file);
+      java.awt.Image image = systemIcon.getImage();
 
-  /**
-   * Instances of this class manage a progress dialog for file operations.
-   */
-  class ProgressDialog {
-    public final static int COPY = 0;
-
-    public final static int DELETE = 1;
-
-    public final static int MOVE = 2;
-
-    Shell shell;
-
-    Label messageLabel, detailLabel;
-
-    ProgressBar progressBar;
-
-    Button cancelButton;
-
-    boolean isCancelled = false;
-
-    final String operationKeyName[] = { "Copy", "Delete", "Move" };
-
-    /**
-     * Creates a progress dialog but does not open it immediately.
-     * 
-     * @param parent
-     *            the parent Shell
-     * @param style
-     *            one of COPY, MOVE
-     */
-    public ProgressDialog(Shell parent, int style) {
-      shell = new Shell(parent, SWT.BORDER | SWT.TITLE
-          | SWT.APPLICATION_MODAL);
-      GridLayout gridLayout = new GridLayout();
-      shell.setLayout(gridLayout);
-      shell.setText(getResourceString("progressDialog."
-          + operationKeyName[style] + ".title"));
-      shell.addShellListener(new ShellAdapter() {
-        public void shellClosed(ShellEvent e) {
-          isCancelled = true;
-        }
-      });
-
-      messageLabel = new Label(shell, SWT.HORIZONTAL);
-      messageLabel.setLayoutData(new GridData(GridData.FILL_HORIZONTAL
-          | GridData.VERTICAL_ALIGN_FILL));
-      messageLabel.setText(getResourceString("progressDialog."
-          + operationKeyName[style] + ".description"));
-
-      progressBar = new ProgressBar(shell, SWT.HORIZONTAL | SWT.WRAP);
-      progressBar.setLayoutData(new GridData(GridData.FILL_HORIZONTAL
-          | GridData.VERTICAL_ALIGN_FILL));
-      progressBar.setMinimum(0);
-      progressBar.setMaximum(0);
-
-      detailLabel = new Label(shell, SWT.HORIZONTAL);
-      GridData gridData = new GridData(GridData.FILL_HORIZONTAL
-          | GridData.VERTICAL_ALIGN_BEGINNING);
-      gridData.widthHint = 400;
-      detailLabel.setLayoutData(gridData);
-
-      cancelButton = new Button(shell, SWT.PUSH);
-      cancelButton.setLayoutData(new GridData(
-          GridData.HORIZONTAL_ALIGN_END
-              | GridData.VERTICAL_ALIGN_FILL));
-      cancelButton
-          .setText(getResourceString("progressDialog.cancelButton.text"));
-      cancelButton.addSelectionListener(new SelectionAdapter() {
-        public void widgetSelected(SelectionEvent e) {
-          isCancelled = true;
-          cancelButton.setEnabled(false);
-        }
-      });
-    }
-
-    /**
-     * Sets the detail text to show the filename along with a string
-     * representing the operation being performed on that file.
-     * 
-     * @param file
-     *            the file to be detailed
-     * @param operation
-     *            one of COPY, DELETE
-     */
-    public void setDetailFile(File file, int operation) {
-      detailLabel.setText(getResourceString("progressDialog."
-          + operationKeyName[operation] + ".operation",
-          new Object[] { file }));
-    }
-
-    /**
-     * Returns true if the Cancel button was been clicked.
-     * 
-     * @return true if the Cancel button was clicked.
-     */
-    public boolean isCancelled() {
-      return isCancelled;
-    }
-
-    /**
-     * Sets the total number of work units to be performed.
-     * 
-     * @param work
-     *            the total number of work units
-     */
-    public void setTotalWorkUnits(int work) {
-      progressBar.setMaximum(work);
-    }
-
-    /**
-     * Adds to the total number of work units to be performed.
-     * 
-     * @param work
-     *            the number of work units to add
-     */
-    public void addWorkUnits(int work) {
-      setTotalWorkUnits(progressBar.getMaximum() + work);
-    }
-
-    /**
-     * Sets the progress of completion of the total work units.
-     * 
-     * @param work
-     *            the total number of work units completed
-     */
-    public void setProgress(int work) {
-      progressBar.setSelection(work);
-      while (display.readAndDispatch()) {
-      } // enable event processing
-    }
-
-    /**
-     * Adds to the progress of completion of the total work units.
-     * 
-     * @param work
-     *            the number of work units completed to add
-     */
-    public void addProgress(int work) {
-      setProgress(progressBar.getSelection() + work);
-    }
-
-    /**
-     * Opens the dialog.
-     */
-    public void open() {
-      shell.pack();
-      final Shell parentShell = (Shell) shell.getParent();
-      Rectangle rect = parentShell.getBounds();
-      Rectangle bounds = shell.getBounds();
-      bounds.x = rect.x + (rect.width - bounds.width) / 2;
-      bounds.y = rect.y + (rect.height - bounds.height) / 2;
-      shell.setBounds(bounds);
-      shell.open();
-    }
-
-    /**
-     * Closes the dialog and disposes its resources.
-     */
-    public void close() {
-      shell.close();
-      shell.dispose();
-      shell = null;
-      messageLabel = null;
-      detailLabel = null;
-      progressBar = null;
-      cancelButton = null;
-    }
-  }
-}
-
-/**
- * Manages icons for the application. This is necessary as we could easily end
- * up creating thousands of icons bearing the same image.
- */
-class IconCache {
-  // Stock images
-  public final int shellIcon = 0, iconClosedDrive = 1, iconClosedFolder = 2,
-      iconFile = 3, iconOpenDrive = 4, iconOpenFolder = 5, cmdCopy = 6,
-      cmdCut = 7, cmdDelete = 8, cmdParent = 9, cmdPaste = 10,
-      cmdPrint = 11, cmdRefresh = 12, cmdRename = 13, cmdSearch = 14;
-
-  public final String[] stockImageLocations = { "generic_example.gif",
-      "icon_ClosedDrive.gif", "icon_ClosedFolder.gif", "icon_File.gif",
-      "icon_OpenDrive.gif", "icon_OpenFolder.gif", "cmd_Copy.gif",
-      "cmd_Cut.gif", "cmd_Delete.gif", "cmd_Parent.gif", "cmd_Paste.gif",
-      "cmd_Print.gif", "cmd_Refresh.gif", "cmd_Rename.gif",
-      "cmd_Search.gif" };
-
-  public Image stockImages[];
-
-  // Stock cursors
-  public final int cursorDefault = 0, cursorWait = 1;
-
-  public Cursor stockCursors[];
-
-  // Cached icons
-  private Hashtable iconCache; /* map Program to Image */
-
-  public IconCache() {
-  }
-
-  /**
-   * Loads the resources
-   * 
-   * @param display
-   *            the display
-   */
-  public void initResources(Display display) {
-    if (stockImages == null) {
-      stockImages = new Image[stockImageLocations.length];
-
-      /*for (int i = 0; i < stockImageLocations.length; ++i) {
-        Image image = createStockImage(display, stockImageLocations[i]);
-        if (image == null) {
-          freeResources();
-          throw new IllegalStateException(New
-              .getResourceString("error.CouldNotLoadResources"));
-        }
-        stockImages[i] = image;
-      }*/
-    }
-    if (stockCursors == null) {
-      stockCursors = new Cursor[] { null,
-          new Cursor(display, SWT.CURSOR_WAIT) };
-    }
-    iconCache = new Hashtable();
-  }
-
-  /**
-   * Frees the resources
-   */
-  public void freeResources() {
-    if (stockImages != null) {
-      for (int i = 0; i < stockImages.length; ++i) {
-        final Image image = stockImages[i];
-        if (image != null)
-          image.dispose();
-      }
-      stockImages = null;
-    }
-    if (iconCache != null) {
-      for (Enumeration it = iconCache.elements(); it.hasMoreElements();) {
-        Image image = (Image) it.nextElement();
-        image.dispose();
-      }
-    }
-    if (stockCursors != null) {
-      for (int i = 0; i < stockCursors.length; ++i) {
-        final Cursor cursor = stockCursors[i];
-        if (cursor != null)
-          cursor.dispose();
-      }
-      stockCursors = null;
-    }
+      int width = image.getWidth(null);
+      int height = image.getHeight(null);
+      BufferedImage bufferedImage = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+      Graphics2D g2d = bufferedImage.createGraphics();
+      g2d.drawImage(image, 0, 0, null);
+      g2d.dispose();
+      int[] data = ((DataBufferInt) bufferedImage.getData().getDataBuffer()).getData();
+      ImageData imageData = new ImageData(width, height, 24, new PaletteData(0xFF0000, 0x00FF00, 0x0000FF));
+      imageData.setPixels(0, 0, data.length, data, 0);
+      Image swtImage = new Image(this.display, imageData);
+      return swtImage;
   }
 }

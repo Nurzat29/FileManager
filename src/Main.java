@@ -612,7 +612,7 @@ public class Main {
        		  table.setMenu(popupMenu);
     	      menuItem.addListener(SWT.Selection, new Listener() {
 				
-				@Override
+				
 				public void handleEvent(Event arg0) {
 					if(table.getSelection().length != 0) {
 						TableItem[] item1 = table.getSelection();
